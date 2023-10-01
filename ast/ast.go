@@ -122,3 +122,50 @@ func (es *ExpressionStatement) String() string {
 	}
 	return ""
 }
+
+// IntegerLiteral 整数字面量
+// `5;`
+type IntegerLiteral struct {
+	Token token.Token
+	Value int64
+}
+
+func (il *IntegerLiteral) expressionNode() {}
+func (il *IntegerLiteral) TokenLiteral() string {
+	return il.Token.Literal
+}
+func (il *IntegerLiteral) String() string {
+	return il.Token.Literal
+}
+
+// PrefixExpression 前缀运算符表达式
+// `!True`, `-5`
+type PrefixExpression struct {
+	Token    token.Token // 前缀词法单元: !, -
+	Operator string
+	Right    Expression
+}
+
+func (pe *PrefixExpression) expressionNode() {}
+func (pe *PrefixExpression) TokenLiteral() string {
+	return pe.Token.Literal
+}
+func (pe *PrefixExpression) String() string {
+	var out bytes.Buffer
+
+	out.WriteString("(")
+	out.WriteString(pe.Operator)
+	out.WriteString(pe.Right.String())
+	out.WriteString(")")
+
+	return out.String()
+}
+
+// InfixExpression 中缀运算符表达式
+// `5 + 5`, `5 > 10`
+type InfixExpression struct {
+	Token    token.Token // 运算符词法单元, 如: >
+	Left     Expression
+	Operator string
+	Right    Expression
+}

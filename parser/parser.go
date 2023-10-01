@@ -5,6 +5,18 @@ import (
 	"github.com/iWangMu/Go-Interpreter/ast"
 	"github.com/iWangMu/Go-Interpreter/lexer"
 	"github.com/iWangMu/Go-Interpreter/token"
+	"strconv"
+)
+
+const (
+	_ int = iota
+	LOWEST
+	EQUALS      // ==
+	LESSGREATER // >, <
+	SUM         // +
+	PRODUCT     // *
+	PREFIX      // !x, -x
+	CALL        // myFunc(x)
 )
 
 // 前缀解析函数
@@ -29,6 +41,13 @@ type Parser struct {
 
 func New(lex *lexer.Lexer) *Parser {
 	p := &Parser{lex: lex, errors: []string{}}
+	// 注册前缀解析函数
+	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
+	p.registerPrefix(token.IDENTIFIER, p.parseIdentifier)
+	p.registerPrefix(token.INTEGER, p.parseIntegerLiteral)
+	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+	p.registerPrefix(token.BANG, p.parsePrefixExpression)
+
 	// 读取两个词法单元，设置curToken和peekToken
 	p.nextToken()
 	p.nextToken()
@@ -84,8 +103,10 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseLetStatement()
 	case token.RETURN:
 		return p.parseReturnStatement()
-	default:
+	case token.SEMICOLON:
 		return nil
+	default:
+		return p.parseExpressionStatement()
 	}
 }
 
@@ -116,7 +137,48 @@ func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
 	return stmt
 }
 
-func (p *Parser)
+func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
+	stmt := &ast.ExpressionStatement{Token: p.curToken}
+	stmt.Expression = p.parseExpression(LOWEST)
+
+	// 分号(;)表示语句结束
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+	return stmt
+}
+
+func (p *Parser) parseExpression(precedence int) ast.Expression {
+	prefix := p.prefixParseFns[p.curToken.Type]
+	if prefix == nil {
+		p.noPrefixParseFnError(p.curToken.Type)
+		return nil
+	}
+	leftExp := prefix()
+	return leftExp
+}
+
+func (p *Parser) parseIntegerLiteral() ast.Expression {
+	il := &ast.IntegerLiteral{Token: p.curToken}
+	value, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
+	if err != nil {
+		msg := fmt.Sprintf("could not parse %q as integer.", p.curToken.Literal)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+	il.Value = value
+	return il
+}
+
+func (p *Parser) parsePrefixExpression() ast.Expression {
+	expression := &ast.PrefixExpression{
+		Token:    p.curToken,
+		Operator: p.curToken.Literal,
+	}
+	p.nextToken()
+	expression.Right = p.parseExpression(PREFIX)
+	return expression
+}
 
 /**
  * 判断下一个词法单元是否是预期类型的词法单元
@@ -141,4 +203,13 @@ func (p *Parser) currTokenIs(t token.TokenType) bool {
 func (p *Parser) peekTokenIs(t token.TokenType) bool {
 
 	return p.peekToken.Type == t
+}
+
+func (p *Parser) parseIdentifier() ast.Expression {
+	return &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+}
+
+func (p *Parser) noPrefixParseFnError(t token.TokenType) {
+	msg := fmt.Sprintf("no prefix parse function for %s found", t)
+	p.errors = append(p.errors, msg)
 }
